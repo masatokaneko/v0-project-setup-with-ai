@@ -1,0 +1,160 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 顧客情報
+model Customer {
+  id        String   @id @default(cuid())
+  name      String   // 顧客名
+  code      String?  @unique // 顧客コード
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // リレーション
+  deals     Deal[]
+
+  @@map("customers")
+}
+
+// 商品マスタ
+model Product {
+  id          String     @id @default(cuid())
+  name        String     // 商品名
+  code        String?    @unique // 商品コード
+  description String?    // 商品説明
+  type        SalesType  // 売上種別（ライセンス・サービス）
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // リレーション
+  dealItems   DealItem[]
+
+  @@map("products")
+}
+
+// 商談（Deals）
+model Deal {
+  id              String    @id @default(cuid())
+  name            String    // 商談名
+  customerId      String    // 顧客ID
+  dealDate        DateTime  // 商談日付
+  fiscalYear      Int       // 計上会計年度
+  fiscalQuarter   Int       // 計上会計四半期
+  status          DealStatus @default(OPEN) // 商談ステータス
+  description     String?   // 商談説明
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // リレーション
+  customer        Customer  @relation(fields: [customerId], references: [id])
+  dealItems       DealItem[]
+
+  @@map("deals")
+}
+
+// 新規獲得契約アイテム（Deal Items）
+model DealItem {
+  id              String    @id @default(cuid())
+  dealId          String    // 商談ID
+  productId       String    // 商品ID
+  quantity        Int       @default(1) // 数量
+  unitPrice       Float     // 単価（税抜）
+  taxRate         Float     @default(0.1) // 税率
+  amountBeforeTax Float     // 契約金額（税抜）
+  amountAfterTax  Float     // 契約金額（税込）
+  startDate       DateTime  // 契約開始日
+  endDate         DateTime  // 契約終了日
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // リレーション
+  deal            Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  product         Product   @relation(fields: [productId], references: [id])
+  monthlySales    MonthlySales[]
+
+  @@map("deal_items")
+}
+
+// 月次按分売上（Monthly Sales）
+model MonthlySales {
+  id              String    @id @default(cuid())
+  dealItemId      String    // 新規獲得契約アイテムID
+  year            Int       // 年
+  month           Int       // 月
+  totalDaysInMonth Int      // 月の総日数
+  applicableDays  Int       // 適用日数
+  dailyRate       Float     // 日割り単価
+  amount          Float     // 按分金額
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // リレーション
+  dealItem        DealItem  @relation(fields: [dealItemId], references: [id], onDelete: Cascade)
+
+  @@unique([dealItemId, year, month])
+  @@map("monthly_sales")
+}
+
+// 費用（Costs）
+model Cost {
+  id              String    @id @default(cuid())
+  year            Int       // 年
+  month           Int       // 月
+  type            CostType  // 費用種別
+  category        String    // 費用カテゴリ
+  amount          Float     // 金額
+  description     String?   // 説明
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("costs")
+}
+
+// 予算（Budgets）
+model Budget {
+  id              String      @id @default(cuid())
+  year            Int         // 年
+  month           Int         // 月
+  type            BudgetType  // 予算種別
+  category        String?     // カテゴリ（売上種別、費用項目など）
+  amount          Float       // 予算金額
+  description     String?     // 説明
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([year, month, type, category])
+  @@map("budgets")
+}
+
+// 列挙型
+enum SalesType {
+  LICENSE   // ライセンス
+  SERVICE   // サービス
+}
+
+enum DealStatus {
+  OPEN      // 進行中
+  WON       // 成約
+  LOST      // 失注
+}
+
+enum CostType {
+  COGS      // 売上原価
+  SGA       // 販管費
+}
+
+enum BudgetType {
+  DEAL_ACQUISITION  // 新規契約獲得
+  REVENUE           // 売上
+  COGS              // 売上原価
+  SGA               // 販管費
+  PROFIT            // 利益
+}
